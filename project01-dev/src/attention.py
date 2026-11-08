@@ -7,7 +7,7 @@ attention.py - Attention + Seq2Seq 연결 (담당: 세원)
 [가정] 다른 파일이 아래 형식을 지켜야 이 파일이 동작한다
 ----------------------------------------------------------------------
 - PAD_ID = 0                                         (data.py, 재후)
-- 배치 x, y 는 compact_batch 를 거친 LongTensor
+- 배치 x, y 는 data.py 의 collate_fn 으로 배치마다 패딩된 LongTensor
     x: (batch, Tv)   y: (batch, Tq)                  (data.py, 재후)
 - encoder(x) -> enc_output, hidden                   (model.py, 기수)
     enc_output: (batch, Tv', hidden_dim)   * pad_packed_sequence 출력
