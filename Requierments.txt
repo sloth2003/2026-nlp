@@ -1,0 +1,25 @@
+# 자연어처리데이터 Project 1 - Seq2Seq Num2Text
+# 환경: Python 3.12 / Windows / NVIDIA GPU (PyTorch CUDA 13.0 빌드)
+#
+# 설치:
+#   conda create -n nlp python=3.12 -y
+#   conda activate nlp
+#   pip install -r requirements.txt
+#   python -m ipykernel install --user --name nlp --display-name "Python (nlp)"
+#
+# nvidia-smi의 CUDA Version이 12.x이면 아래 cu130을 cu126으로 바꿀 것
+
+--extra-index-url https://download.pytorch.org/whl/cu130
+
+# 딥러닝
+torch
+
+# 데이터 처리 / 시각화
+numpy
+pandas
+matplotlib
+tqdm
+
+# 노트북
+jupyter
+ipykernel
