@@ -1,7 +1,7 @@
 """
 attention.py - Attention + Seq2Seq 연결 (담당: 세원)
 
-"Attention Module", attention 버전 predict / train_step
+기준: Bahdanau-style additive attention
 
 ----------------------------------------------------------------------
 [가정] 다른 파일이 아래 형식을 지켜야 이 파일이 동작한다
@@ -33,7 +33,7 @@ PAD_ID = 0
 class Attention(nn.Module):
     """Additive (Bahdanau-style) attention + 출력층 fc
 
-    score(h_q, h_k) = sum( scale * tanh(W_q h_q + W_k h_k) )
+    score(h_q, h_k) = scale · tanh(W_q h_q + W_k h_k)   (내적)
     """
 
     def __init__(self, hidden_dim, vocab_size):
