@@ -1,7 +1,7 @@
 """
 attention.py - Attention + Seq2Seq 연결 (담당: 세원)
 
-기준: 강의 D2-1 Seq2Seq (수정본) "Attention Module", attention 버전 predict / train_step
+"Attention Module", attention 버전 predict / train_step
 
 ----------------------------------------------------------------------
 [가정] 다른 파일이 아래 형식을 지켜야 이 파일이 동작한다
@@ -31,7 +31,7 @@ PAD_ID = 0
 
 
 class Attention(nn.Module):
-    """Additive (Bahdanau-style) attention + 출력층 fc  (강의 코드 그대로)
+    """Additive (Bahdanau-style) attention + 출력층 fc
 
     score(h_q, h_k) = sum( scale * tanh(W_q h_q + W_k h_k) )
     """
@@ -61,7 +61,8 @@ class Attention(nn.Module):
 
         # (batch, Tq, 1, hidden) + (batch, 1, Tv, hidden) -> (batch, Tq, Tv, hidden)
         scores = torch.tanh(query.unsqueeze(2) + key.unsqueeze(1))
-        scores = torch.sum(self.scale * scores, dim=-1)                  # (batch, Tq, Tv)
+        # (batch, Tq, Tv, hidden) @ (hidden,) -> (batch, Tq, Tv)
+        scores = scores @ self.scale
 
         # encoder 의 PAD 위치는 softmax 전에 -inf 로 -> 가중치 0
         scores = scores.masked_fill(~input_mask.unsqueeze(1), float("-inf"))
