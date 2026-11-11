@@ -90,14 +90,24 @@ class Decoder(nn.Module):
         # y: (batch, Tq)
         # hidden: (num_layers, batch, hidden_dim)
 
+        lengths = (y != self.embedding.padding_idx).sum(dim=1).cpu()
+        lengths = lengths.clamp(min=1)
+
         embedded = self.embedding(y)
 
-        dec_output, hidden = self.gru(
+        packed = pack_padded_sequence(
             embedded,
-            hidden,
+            lengths,
+            batch_first=True,
+            enforce_sorted=False,
         )
 
-        # FC는 Attention에서 처리
-        # dec_output: (batch, Tq, hidden_dim)
-        # hidden: (num_layers, batch, hidden_dim)
+        packed_out, hidden = self.gru(packed, hidden)
+
+        dec_output, _ = pad_packed_sequence(
+            packed_out,
+            batch_first=True,
+            total_length=y.size(1),
+        )
+
         return dec_output, hidden
