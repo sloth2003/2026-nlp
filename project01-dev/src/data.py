@@ -36,6 +36,8 @@ num_eng = pd.read_csv(
 )
 
 # combined df
+# num2kor / num2eng 는 서로 다른 숫자를 랜덤 샘플링한 것이라 숫자가 일부만 겹친다.
+# outer merge 라서 한쪽에만 있는 숫자는 kor 또는 eng 가 NaN -> load_data 에서 쓰는 두 열 기준으로 걸러낸다.
 combined = pd.merge(num_kor, num_eng, on='num', how='outer')
 combined['num'] = combined['num'].astype('str')
 
@@ -99,7 +101,13 @@ def collate_fn(batch):
 
 
 # data loader
+def pair_df(df, input_col, output_col):
+    # 입력·정답 열이 둘 다 있는 행만 남김 (한쪽 파일에만 있는 숫자 제외)
+    return df.dropna(subset=[input_col, output_col]).reset_index(drop=True)
+
+
 def load_data(input_col, output_col, df, config):
+    df = pair_df(df, input_col, output_col)
     src_vocab = Vocab(df[input_col], input_col)
     tgt_vocab = Vocab(df[output_col], output_col)
     dataset = NumDataset(df, input_col, output_col, src_vocab, tgt_vocab)
@@ -137,9 +145,17 @@ if __name__ == '__main__':
     print('[OK] config')
 
     # 2. 원본 데이터
-    assert combined.isna().sum().sum() == 0, 'merge 후 NaN 있음 (num2kor / num2eng 숫자 불일치)'
-    assert combined['num'].is_unique, '중복된 숫자 있음'
-    print(f'[OK] data: {combined.shape}')
+    # num2kor / num2eng 의 숫자가 서로 다르므로 combined 의 NaN 은 정상. 파일별로 따로 검사한다.
+    for name, df in [('num2kor', num_kor), ('num2eng', num_eng)]:
+        assert df.isna().sum().sum() == 0, f'{name}에 빈 값 있음'
+        assert df['num'].is_unique, f'{name}에 중복된 숫자 있음'
+    has_kor, has_eng = combined['kor'].notna(), combined['eng'].notna()
+    n_both = int((has_kor & has_eng).sum())
+    assert combined['num'].is_unique, 'merge 후 중복된 숫자 있음'
+    assert (has_kor | has_eng).all(), 'kor / eng 둘 다 없는 행 있음'
+    assert has_kor.sum() == len(num_kor) and has_eng.sum() == len(num_eng), 'merge 중 행이 사라지거나 늘어남'
+    assert len(combined) == len(num_kor) + len(num_eng) - n_both, 'merge 후 행 개수 이상'
+    print(f'[OK] data: kor {len(num_kor)}, eng {len(num_eng)}, 둘 다 있는 숫자 {n_both}, combined {combined.shape}')
 
     # 3. tokenize
     assert tokenize('21546', 'num') == ['2', '1', '5', '4', '6']
@@ -150,15 +166,19 @@ if __name__ == '__main__':
     for out_col in ['eng', 'kor']:
         print(f'\n===== num -> {out_col} =====')
 
+        # 이 방향에서 실제로 쓰는 행 (num 과 out_col 이 둘 다 있는 행)
+        pair = pair_df(combined, 'num', out_col)
+        assert len(pair) == combined[out_col].notna().sum() and pair.isna()[['num', out_col]].sum().sum() == 0
+
         # 4. Vocab
-        src_vocab = Vocab(combined['num'], 'num')
-        tgt_vocab = Vocab(combined[out_col], out_col)
+        src_vocab = Vocab(pair['num'], 'num')
+        tgt_vocab = Vocab(pair[out_col], out_col)
         assert src_vocab.itos[:4] == SPECIALS and tgt_vocab.itos[:4] == SPECIALS, '특수 토큰 id가 0~3이 아님'
         assert len(src_vocab) == 4 + 10, f'숫자 어휘 크기 이상: {len(src_vocab)}'
         assert src_vocab.encode('12') == [BOS_ID, src_vocab.stoi['1'], src_vocab.stoi['2'], EOS_ID]
         assert src_vocab.encode('1a')[2] == UNK_ID, '모르는 토큰이 <unk>로 안 바뀜'
         assert tgt_vocab.decode([BOS_ID, tgt_vocab.stoi[tgt_vocab.itos[4]], EOS_ID, 5, 6]) == tgt_vocab.itos[4], '<eos> 이후가 안 잘림'
-        for s in combined[out_col]:   # 전체 문장 encode -> decode 복원 확인
+        for s in pair[out_col]:   # 전체 문장 encode -> decode 복원 확인
             assert tgt_vocab.decode(tgt_vocab.encode(s)) == s, f'복원 실패: {s!r}'
         print(f'[OK] vocab: src {len(src_vocab)}, tgt {len(tgt_vocab)}')
 
@@ -166,7 +186,7 @@ if __name__ == '__main__':
         seed_everything(config['random_seed'])
         train_loader, valid_loader, test_loader, src_vocab, tgt_vocab = load_data('num', out_col, combined, config)
 
-        n = len(combined)
+        n = len(pair)   # combined 전체가 아니라 NaN 을 뺀 행 수
         sizes = [len(l.dataset) for l in (train_loader, valid_loader, test_loader)]
         assert sum(sizes) == n, '분할 후 개수 합이 안 맞음'
         idx = [set(l.dataset.indices) for l in (train_loader, valid_loader, test_loader)]
@@ -188,12 +208,26 @@ if __name__ == '__main__':
         print(f'[OK] batch: src {tuple(src.shape)}, tgt {tuple(tgt.shape)}')
 
         # 배치 -> 원래 문장 복원
-        orig = combined.iloc[train_loader.dataset.indices]
+        orig = pair.iloc[train_loader.dataset.indices]
         lookup = dict(zip(orig['num'], orig[out_col]))
         for s_ids, t_ids in zip(src, tgt):
             num = src_vocab.decode(s_ids.tolist())
             assert lookup[num] == tgt_vocab.decode(t_ids.tolist()), f'입력-정답 짝이 안 맞음: {num}'
         print('[OK] batch 복원')
         print('예시:', src_vocab.decode(src[0].tolist()), '->', tgt_vocab.decode(tgt[0].tolist()))
+
+    # 6. kor <-> eng: 두 파일에 모두 있는 숫자만 짝이 된다
+    print('\n===== kor -> eng =====')
+    pair = pair_df(combined, 'kor', 'eng')
+    loaders = load_data('kor', 'eng', combined, config)
+    assert sum(len(l.dataset) for l in loaders[:3]) == len(pair) == n_both, 'kor-eng 짝 개수가 겹치는 숫자 개수와 다름'
+    src_vocab, tgt_vocab = loaders[3], loaders[4]
+    lookup = dict(zip(pair['kor'], pair['eng']))
+    src, tgt = next(iter(loaders[0]))
+    for s_ids, t_ids in zip(src, tgt):
+        kor = src_vocab.decode(s_ids.tolist())
+        assert lookup[kor] == tgt_vocab.decode(t_ids.tolist()), f'입력-정답 짝이 안 맞음: {kor}'
+    print(f'[OK] kor-eng 짝 {len(pair)}개, batch 복원')
+    print('예시:', src_vocab.decode(src[0].tolist()), '->', tgt_vocab.decode(tgt[0].tolist()))
 
     print('\n모든 테스트 통과')
