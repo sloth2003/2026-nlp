@@ -79,7 +79,10 @@ class MultiSeq2Seq(nn.Module):
         복사가 아니라 같은 Encoder / Decoder 객체를 공유한다 (평가·추론용).
         """
         _, tgt_lang = direction.split("2")
-        return Seq2Seq(self.encoder, self.decoders[tgt_lang])
+        seq = Seq2Seq(self.encoder, self.decoders[tgt_lang])
+        # 새로 만든 nn.Module 은 기본이 train 모드라서, 지금 모델의 모드(train / eval)에 맞춘다
+        seq.train(self.training)
+        return seq
 
 
 def build_model(src_vocab_size, tgt_vocab_sizes, **model_kwargs):
