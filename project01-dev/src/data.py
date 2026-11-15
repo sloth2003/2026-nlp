@@ -3,7 +3,7 @@ import torch
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from torch.utils.data import Dataset, DataLoader, random_split
+from torch.utils.data import Dataset, DataLoader, Subset, random_split
 import json
 from pathlib import Path
 import random
@@ -16,20 +16,31 @@ def seed_everything(seed=42):
   torch.manual_seed(seed)  # CPU + GPU 모두 고정
 
 # ship config
-ROOT = Path(__file__).resolve().parent.parent
-with open(ROOT / "config" / "split.json", encoding="utf-8") as f:
+# 설정은 src 폴더 안(config.json)에 둔다 -> src 폴더만 있어도 동작
+SRC = Path(__file__).resolve().parent
+ROOT = SRC.parent
+with open(SRC / "config.json", encoding="utf-8") as f:
     config = json.load(f)
 
-# data 
+# data
+# 데이터는 src 옆의 공용 폴더(project01-dev/data)에서 읽는다.
+DATA_DIR = ROOT / 'data'
+for _name in ('num2kor.txt', 'num2eng.txt'):
+    if not (DATA_DIR / _name).is_file():
+        raise FileNotFoundError(
+            f"{DATA_DIR / _name} 이 없습니다. "
+            f"num2kor.txt, num2eng.txt 를 {DATA_DIR} 폴더에 넣어 주세요."
+        )
+
 num_kor = pd.read_csv(
-    ROOT / 'data' / 'num2kor.txt',
+    DATA_DIR / 'num2kor.txt',
     sep='\t',
     header=None,
     names=['num', 'kor']
 )
 
 num_eng = pd.read_csv(
-    ROOT / 'data' / 'num2eng.txt',
+    DATA_DIR / 'num2eng.txt',
     sep='\t',
     header=None,
     names=['num', 'eng']
@@ -124,6 +135,64 @@ def load_data(input_col, output_col, df, config):
     valid_loader = DataLoader(valid_set, batch_size=bs, shuffle=False, collate_fn=collate_fn)
     test_loader  = DataLoader(test_set,  batch_size=bs, shuffle=False, collate_fn=collate_fn)
     return train_loader, valid_loader, test_loader, src_vocab, tgt_vocab
+
+
+# 1 enc 3 dec 학습용 loader 묶음
+def split_by_number(nums, config):
+    """숫자 -> 'train' / 'valid' / 'test'. 숫자 기준으로 한 번만 나눠 6방향이 같은 분할을 쓴다."""
+    nums = sorted(nums)   # 문자열 그대로 정렬 (int 변환 없음)
+    g = torch.Generator().manual_seed(config['random_seed'])
+    order = torch.randperm(len(nums), generator=g).tolist()
+    n_train = int(len(nums) * config['train_ratio'])
+    n_valid = int(len(nums) * config['valid_ratio'])
+    split_of = {}
+    for rank, i in enumerate(order):
+        split_of[nums[i]] = 'train' if rank < n_train else 'valid' if rank < n_train + n_valid else 'test'
+    return split_of
+
+
+def build_vocabs(df, langs=('num', 'eng', 'kor')):
+    """출력 vocab 은 언어별, 입력 vocab 은 세 언어 토큰을 합친 통합 사전.
+
+    src_vocabs 의 세 Vocab 은 id 가 모두 같고 col(토큰화 방식)만 다르다 -> 공유 Encoder 하나에 넣을 수 있다.
+    """
+    tgt_vocabs = {lang: Vocab(df[lang].dropna(), lang) for lang in langs}
+    joint_tokens = sorted({t for v in tgt_vocabs.values() for t in v.itos[len(SPECIALS):]})
+
+    src_vocabs = {}
+    for lang in langs:
+        v = Vocab([], lang)
+        v.itos = SPECIALS + joint_tokens
+        v.stoi = {t: i for i, t in enumerate(v.itos)}
+        src_vocabs[lang] = v
+    return src_vocabs, tgt_vocabs
+
+
+def build_loaders(config, directions, langs=('num', 'eng', 'kor'), df=None, limit=None):
+    """6방향 loader 묶음 -> loaders, src_vocabs, tgt_vocabs
+
+    loaders[direction]['train' / 'valid' / 'test'] 로 꺼낸다 (direction: 'kor2eng' 등).
+    limit: 숫자를 주면 분할마다 앞에서 그 개수만 사용 (빠른 동작 확인용).
+    """
+    df = combined if df is None else df
+    split_of = split_by_number(df['num'], config)
+    src_vocabs, tgt_vocabs = build_vocabs(df, langs)
+
+    loaders = {}
+    for direction in directions:
+        s, t = direction.split('2')
+        pair = pair_df(df, s, t)   # 두 열이 다 있는 행만 (kor-eng 는 공통 숫자만)
+        dataset = NumDataset(pair, s, t, src_vocabs[s], tgt_vocabs[t])
+        loaders[direction] = {}
+        for part in ('train', 'valid', 'test'):
+            idx = [i for i, n in enumerate(pair['num']) if split_of[n] == part]
+            if limit is not None:
+                idx = idx[:limit]
+            loaders[direction][part] = DataLoader(
+                Subset(dataset, idx), batch_size=config['batch_size'],
+                shuffle=(part == 'train'), collate_fn=collate_fn,
+            )
+    return loaders, src_vocabs, tgt_vocabs
 
 """
 ***사용법***

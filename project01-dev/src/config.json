@@ -1,0 +1,19 @@
+{
+    "train_ratio": 0.8,
+    "valid_ratio": 0.1,
+    "test_ratio" : 0.1,
+    "random_seed" : 42,
+    "batch_size" : 32,
+
+    "epochs": 30,
+    "lr": 0.001,
+    "grad_clip": 1.0,
+    "max_len": 60,
+
+    "model": {
+        "embedding_dim": 128,
+        "hidden_dim": 256,
+        "num_layers": 2,
+        "dropout": 0.1
+    }
+}

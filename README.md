@@ -38,21 +38,39 @@
 ```
 project01/            제출용 (최종 노트북 + 모델 파일 6개)
 project01-dev/        작업용
-├── config/           분할 비율, seed, batch size
-├── data/             num2eng.txt, num2kor.txt
-├── src/              data / model / seq2seq / train / inference / checkpoint
+├── data/             num2eng.txt, num2kor.txt (src·notebook 공용)
+├── src/              로컬 실행용: main(진입점) / data / model / seq2seq / train / inference / checkpoint, config.json(설정)
+├── notebook/         Colab 실행용: train.ipynb 하나에 src 코드를 모두 옮겨 놓음
 ├── tests/            파트별 테스트
-└── notebook/         Colab 실행용 (train.ipynb: 학습·평가·저장)
+└── checkpoints/      로컬 학습 결과 (git 제외)
 ```
 
-## 실행 (Colab)
+`src/`와 `notebook/`은 서로 의존하지 않는다. 한쪽 폴더만 있어도 실행된다.
+`src/`의 코드를 고치면 `notebook/train.ipynb`의 해당 셀도 같이 고친다.
 
-1. 런타임 유형을 T4 GPU로 바꾼다.
-2. `project01-dev/notebook/train.ipynb`를 열고 위에서부터 순서대로 실행한다.
-   - 학습 셀을 다시 실행하면 Drive의 `last.pt`에서 이어서 학습한다.
-   - 제출용 `.pt` 6개는 Drive `MyDrive/2026-nlp/checkpoints/final/`에 저장된다.
+## 실행 (로컬)
+
+환경 설치는 `requirements.txt` 위쪽 주석 참고 (torch는 CUDA 인덱스에서 먼저 설치).
+
+```
+cd project01-dev
+python src/main.py                        # config.json의 epochs만큼 학습 (GPU가 있으면 GPU, 없으면 CPU)
+python src/main.py --limit 96 --epochs 2  # 일부 데이터로 빠르게 동작 확인
+python src/main.py --fresh                # 저장된 지점을 버리고 처음부터
+```
+
+- 다시 실행하면 `checkpoints/last.pt`에서 이어서 학습한다.
+- 제출용 `.pt` 6개는 `checkpoints/final/`에 저장된다.
 
 테스트:
+
+```
+python src/data.py
+python tests/test_seq2seq_checkpoint.py
+python -m pytest tests/test_model.py -q
+```
+
+Colab에서 테스트만 돌릴 때:
 
 ```python
 !git clone https://github.com/sloth2003/2026-nlp.git /content/2026-nlp 2>/dev/null || git -C /content/2026-nlp pull
@@ -60,4 +78,11 @@ project01-dev/        작업용
 !python tests/test_seq2seq_checkpoint.py
 ```
 
-로컬 환경은 `requirements.txt` 참고
+## 실행 (Colab)
+
+1. `project01-dev/notebook/train.ipynb` 파일 하나만 Colab에 올려서 연다. (저장소 clone 불필요)
+2. 런타임 유형을 T4 GPU로 바꾸고 위에서부터 순서대로 실행한다.
+   - 데이터는 GitHub에서 자동으로 내려받는다.
+   - 학습 셀을 실행할 때마다 Drive의 `last.pt`에서 이어서 `EPOCHS_PER_RUN`만큼 더 학습한다. (세션이 끊겨도 처음부터 다시 실행하면 이어진다)
+   - 제출용 `.pt` 6개는 Drive `MyDrive/2026-nlp/checkpoints/final/`에 저장된다.
+   - 마지막 셀은 저장한 `.pt`만으로 6방향 번역을 확인하고, `방향 문장` 형식으로 직접 입력해 볼 수 있다.
