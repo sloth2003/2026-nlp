@@ -219,8 +219,6 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# 학습 결과 (로컬 실행: python src/main.py)
-project01-dev/checkpoints/
 # 노트북을 로컬에서 실행했을 때 생기는 폴더
 project01-dev/notebook/checkpoints/
 project01-dev/notebook/data/

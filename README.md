@@ -42,7 +42,7 @@ project01-dev/        작업용
 ├── src/              로컬 실행용: main(진입점) / data / model / seq2seq / train / inference / checkpoint, config.json(설정)
 ├── notebook/         Colab 실행용: train.ipynb 하나에 src 코드를 모두 옮겨 놓음
 ├── tests/            파트별 테스트
-└── checkpoints/      로컬 학습 결과 (git 제외)
+└── checkpoints/      로컬 학습 결과 (last.pt·last.best.pt: 6 epoch 학습 상태, final/: 제출용 .pt 6개)
 ```
 
 `src/`와 `notebook/`은 서로 의존하지 않는다. 한쪽 폴더만 있어도 실행된다.
